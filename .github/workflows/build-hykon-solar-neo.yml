@@ -1,4 +1,3 @@
-
 name: Build Hykon Solar Neo APK
 
 on:
@@ -14,7 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -24,27 +22,35 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract Android project ZIP
+      - name: Extract source ZIP
         run: |
           test -f HykonSolar-Neo-Complete-Redesign.zip
-          mkdir -p build-src
-          unzip -q HykonSolar-Neo-Complete-Redesign.zip -d build-src
-          test -f build-src/HykonSolar/app/build.gradle.kts
+          mkdir -p extracted
+          unzip -q HykonSolar-Neo-Complete-Redesign.zip -d extracted
+          test -f extracted/HykonSolar/app/build.gradle.kts
+          test -f extracted/HykonSolar/app/hykon.keystore
 
       - name: Build debug APK
-        working-directory: build-src/HykonSolar
+        working-directory: extracted/HykonSolar
         run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Rename APK
         run: |
           mkdir -p output
-          cp build-src/HykonSolar/app/build/outputs/apk/debug/app-debug.apk output/HykonSolar-Neo.apk
+          cp extracted/HykonSolar/app/build/outputs/apk/debug/app-debug.apk output/HykonSolar-Neo.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
