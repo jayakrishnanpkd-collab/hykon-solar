@@ -1,5 +1,4 @@
-
-name: Build Hykon Solar Neo
+name: Build Hykon Solar Neo APK
 
 on:
   workflow_dispatch:
@@ -13,47 +12,54 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
-      - name: Extract source ZIP
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.9'
+
+      - name: Check and extract source ZIP
+        shell: bash
         run: |
+          set -euo pipefail
+          ZIP_FILE="HykonSolar-Neo-Complete-Redesign-FRESH.zip"
+          test -f "$ZIP_FILE" || { echo "::error::ZIP not found at repository root: $ZIP_FILE"; exit 1; }
           mkdir -p source
-          unzip -q HykonSolar-Neo-Complete-Redesign-FRESH.zip -d source
-          find source -name gradlew -type f
+          unzip -q "$ZIP_FILE" -d source
+          PROJECT_DIR="$(find source -type f -name settings.gradle.kts -printf '%h\n' | head -n 1)"
+          test -n "$PROJECT_DIR" || { echo "::error::Could not find settings.gradle.kts inside ZIP"; find source -maxdepth 4 -type f; exit 1; }
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_DIR"
+          test -f "$PROJECT_DIR/app/build.gradle.kts" || { echo "::error::app/build.gradle.kts not found"; exit 1; }
 
-      - name: Locate Android project
-        id: project
-        run: |
-          PROJECT_DIR=$(dirname "$(find source -name settings.gradle.kts -type f | head -n 1)")
-          test -n "$PROJECT_DIR"
-          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+      - name: Build debug APK
+        run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" assembleDebug
 
-      - name: Build Debug APK
-        working-directory: ${{ steps.project.outputs.dir }}
+      - name: Find and rename APK
+        shell: bash
         run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
-
-      - name: Prepare APK
-        run: |
+          set -euo pipefail
+          APK="$(find "$PROJECT_DIR" -type f -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
+          test -n "$APK" || { echo "::error::Build finished but no debug APK was found"; find "$PROJECT_DIR" -type f -name '*.apk'; exit 1; }
           mkdir -p output
-          APK=$(find source -path '*/build/outputs/apk/debug/*.apk' -type f | head -n 1)
-          test -n "$APK"
           cp "$APK" output/HykonSolar-Neo.apk
+          ls -lh output/HykonSolar-Neo.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: HykonSolar-Neo-apk
