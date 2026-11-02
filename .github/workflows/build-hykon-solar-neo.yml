@@ -60,3 +60,4 @@ jobs:
           path: output/HykonSolar-Neo.apk
           if-no-files-found: error
           retention-days: 30
+          
