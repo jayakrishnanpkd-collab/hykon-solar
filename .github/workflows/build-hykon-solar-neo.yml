@@ -1,3 +1,4 @@
+
 name: Build Hykon Solar Neo APK
 
 on:
@@ -12,58 +13,77 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build Hykon Solar Neo
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licences
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
-      - name: Set up Gradle 8.9
-        uses: gradle/actions/setup-gradle@v6
+      - name: Install Android SDK 34
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Check and extract source ZIP
+      - name: Extract project ZIP
         shell: bash
         run: |
-          set -euo pipefail
-          ZIP_FILE="HykonSolar-Neo-Complete-Redesign-FRESH.zip"
-          test -f "$ZIP_FILE" || { echo "::error::ZIP not found at repository root: $ZIP_FILE"; exit 1; }
+          set -e
+          ZIP="HykonSolar-Neo-Complete-Redesign-FRESH.zip"
+          test -f "$ZIP"
           mkdir -p source
-          unzip -q "$ZIP_FILE" -d source
-          PROJECT_DIR="$(find source -type f -name settings.gradle.kts -printf '%h\n' | head -n 1)"
-          test -n "$PROJECT_DIR" || { echo "::error::Could not find settings.gradle.kts inside ZIP"; find source -maxdepth 4 -type f; exit 1; }
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project: $PROJECT_DIR"
-          test -f "$PROJECT_DIR/app/build.gradle.kts" || { echo "::error::app/build.gradle.kts not found"; exit 1; }
+          unzip -q "$ZIP" -d source
 
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" assembleDebug
+          PROJECT=$(find source -name settings.gradle.kts \
+            -type f -printf '%h\n' | head -n 1)
 
-      - name: Find and rename APK
+          test -n "$PROJECT"
+          test -f "$PROJECT/app/build.gradle.kts"
+
+          echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
+          echo "Project found: $PROJECT"
+
+      - name: Build Android APK
+        run: |
+          gradle --no-daemon --stacktrace \
+            -p "$PROJECT_DIR" assembleDebug
+
+      - name: Rename APK
         shell: bash
         run: |
-          set -euo pipefail
-          APK="$(find "$PROJECT_DIR" -type f -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
-          test -n "$APK" || { echo "::error::Build finished but no debug APK was found"; find "$PROJECT_DIR" -type f -name '*.apk'; exit 1; }
+          set -e
+          APK=$(find "$PROJECT_DIR" \
+            -path '*/build/outputs/apk/debug/*.apk' \
+            -type f | head -n 1)
+
+          test -n "$APK"
           mkdir -p output
           cp "$APK" output/HykonSolar-Neo.apk
-          ls -lh output/HykonSolar-Neo.apk
 
-      - name: Upload APK artifact
+          ls -lh output/
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: HykonSolar-Neo-apk
           path: output/HykonSolar-Neo.apk
           if-no-files-found: error
           retention-days: 30
-          
